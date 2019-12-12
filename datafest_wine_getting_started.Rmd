@@ -1,0 +1,76 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+libs
+```{r}
+library(RPostgres)
+# library(RPostgreSQL)
+library(dplyr)
+library(dbplyr)
+library(ggplot2)
+```
+# start db connection
+```{r}
+con <- DBI::dbConnect(
+  RPostgres::Postgres(), 
+  dbname = "postgres",
+  host = "datafest201912.library.ucdavis.edu", 
+  port = 49152,
+  user = "anon",
+  password = "anon"
+)
+
+```
+
+# grab marks and text
+```{r}
+# "page_text_lr" # this is words organized by document
+dbListTables(con) # lists the possible tables to grab from
+mark <- data.frame(tbl(con, "mark"))
+words <- data.frame(tbl(con, "rtesseract_words"))
+more_words <- data.frame(tbl(con, "page_text_lr"))
+```
+```{r}
+words %>% 
+  ggplot(aes(x = confidence)) +
+  geom_density()
+```
+
+
+```{r}
+mark <- tbl(con, "mark")
+data <- mark %>%
+  filter(page_id == '/collection/sherry-lehmann/D-637/d76h1h/media/images/d76h1h-018.jpg') %>%
+  select(everything()) %>%
+  collect()
+
+```
+
+```{r}
+data.frame(mark)
+```
+
+```{r}
+con <- DBI::dbConnect(
+  RPostgreSQL::PostgreSQL(), 
+  dbname = "postgres",
+  host = "datafest201912.library.ucdavis.edu", 
+  port = 49152,
+  user = "anon",
+  password = "anon"
+)
+```
+```{r}
+mark <- tbl(con, "mark")
+data <- mark %>%
+  filter(page_id == '/collection/sherry-lehmann/D-637/d76h1h/media/images/d76h1h-018.jpg') %>%
+  select(everything()) %>%
+  collect()
+
+# or using plain SQL
+ data <- dbGetQuery(con, "select * from mark where page_id = '/collection/sherry-lehmann/D-637/d76h1h/media/images/d76h1h-018.jpg'")
+
+
+
+```

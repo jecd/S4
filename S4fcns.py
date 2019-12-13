@@ -18,7 +18,7 @@ sql_command = "SELECT page_ark FROM {} group by page_ark;".format("rtesseract_wo
 pageIDs = pd.read_sql(sql_command, conn)
 
 def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy = 'confidence'):
-    df = getDoc(document)
+    df, docIdx = getDoc(document)
     # Format dataframe from sql output
     df['text'] = df['text'].str.lower()
     def roundup(x):
@@ -80,4 +80,4 @@ def getDoc(document):
         docIdx = pageIDs[pageIDs['page_ark']==documentName].index[0]
     sql_command = "SELECT * FROM {} WHERE page_ark = '{}';".format("rtesseract_words",documentName)
     df = pd.read_sql(sql_command, conn)
-    return df
+    return df, docIdx

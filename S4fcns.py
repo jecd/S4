@@ -4,6 +4,7 @@ import psycopg2
 import random
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import string
 
 PGHOST="datafest201912.library.ucdavis.edu"
 PGDATABASE="postgres"
@@ -14,8 +15,12 @@ conn_string = ("host={} port={} dbname={} user={} password={}") \
         .format(PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD)
 conn=psycopg2.connect(conn_string)
 
-sql_command = "SELECT page_ark FROM {} group by page_ark;".format("rtesseract_words")
+# sql_command = "SELECT page_ark FROM {} group by page_ark;".format("rtesseract_words")
+# pageIDs = pd.read_sql(sql_command, conn)
+
+sql_command ='select p.page_ark, page_id from page p'
 pageIDs = pd.read_sql(sql_command, conn)
+pageIDs = pageIDs.sort_values('page_ark',ascending = True).reset_index()
 
 def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy = 'confidence'):
     df, docIdx, documentName = getDoc(document)
@@ -37,9 +42,11 @@ def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy
     else:
         pass
     if colorBy == 'userDefined':
-        k = len(np.unique(np.array(colorLabels)));
-        cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, len(topics)))
-        colorLabels = [random.randint(0,max(topics)) for i in range(len(df))]
+        # k = len(np.unique(np.array(colorLabels)));
+        cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, 101))
+        cmap[0,:] = np.array([1,1,1,1])
+        df['colorVals'] = colorLabels
+        # colorLabels = [random.randint(0,max(topics)) for i in range(len(df))]
     elif colorBy == 'random':
         topics = list(range(10))
         k = len(topics)
@@ -51,13 +58,13 @@ def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy
         colorLabels = df['confidence'].astype(int)
     elif colorBy == 'text_confidence':
         confidences = list(range(101))
-        df['confidence'][df['confidence']<60] = 0
+        confidenceThresh = 80;
+        df.loc[df['confidence']<80, 'confidence'] = 0
         cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, len(confidences)))
-        colorLabels = df['confidence'].astype(int)
         colorLabels = df['confidence'].astype(int)
     # Plot:
     fig, ax = plt.subplots(figsize=(im_width/my_dpi, im_height/my_dpi), dpi=my_dpi)
-    for idx,word,c in zip(range(len(df)),df.text,colorLabels):
+    for idx,word,c in zip(list(range(len(df.text))),df.text,colorLabels):
         start = (df.left[idx],df.bottom[idx])
         height = df.top[idx]-df.bottom[idx]
         width = df.right[idx]-df.left[idx]
@@ -67,18 +74,71 @@ def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy
         ax.set_xlim((0,im_width))
         ax.set_ylim((0,im_height))
     plt.title(str(docIdx) + ' : ' + documentName,fontdict = {'fontsize':22})
+    plt.savefig(str(docIdx) + ' : ' + documentName + colorBy + '.png')
     plt.show()
-    return df
+    return
 
-def getDoc(document): 
+def getDoc(document = 'd7pp4q-027'): 
     # Parse args
     if type(document) == int:
-        documentName = pageIDs.page_ark[document]
+        documentName == pageIDs.page_ark[document]
         docIdx = document
     else:
         documentName = document
         docIdx = pageIDs[pageIDs['page_ark']==documentName].index[0]
     sql_command = "SELECT * FROM {} WHERE page_ark = '{}';".format("rtesseract_words",documentName)
     df = pd.read_sql(sql_command, conn)
+    df = df.sort_values('num')
+    df = df.reset_index()
     return df, docIdx, documentName
-    
+
+def getDocLink(document):
+    if type(document) == int:
+        docIdx = document
+    else:    
+        docIdx = pageIDs[pageIDs['page_ark'] == document].index[0]
+    link = 'https://digital.ucdavis.edu'  + pageIDs['page_id'][docIdx]
+    return link
+
+def preprocessText(document):
+    df,_,_ = getDoc(document)
+    texts = list(df.text)
+    preprocessed_texts = []
+    for t in texts:
+        t = ''.join([c for c in t if c in string.ascii_letters or c in string.whitespace])
+        t = t.lower()
+        t = t.split()
+        if len(t) > 0:
+            preprocessed_texts.append(t[0])
+        else:
+            preprocessed_texts.append('')   
+    return preprocessed_texts
+
+def orderScores(preprocessed_texts, scores):
+    ''' Input all the prepreocessed texts in the document 
+    and the cosine similary scores lookup table (should have a range from 0 to 2)
+
+    Output scores associated with each word in the document in order.
+    '''
+    orderedScores = []
+    for idx, word in zip(range(len(preprocessed_texts)), preprocessed_texts):
+        if preprocessed_texts[idx]== '':
+            orderedScores.append(0)
+        else:
+            wordScore = scores[scores.columns[1]][scores['source_word'] == preprocessed_texts[idx]]
+            if wordScore.empty:
+                orderedScores.append(0)
+            else:
+                orderedScores.append(wordScore.values[0]) 
+    return orderedScores
+
+def getColorIdx(orderedScores):
+    ''' Given cosine similary scores for each word 
+    output the color index from 0 to 100'''
+    colorIdxs = list(np.round(100*np.array(orderedScores)/2).astype(int))
+    return colorIdxs
+
+def getOrderedColorIdx(preprocessed_texts, scores): 
+    orderedScores = orderScores(preprocessed_texts, scores)
+    colorIdxs = getColorIdx(orderedScores)
+    return colorIdxs 

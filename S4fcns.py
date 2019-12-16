@@ -22,7 +22,7 @@ sql_command ='select p.page_ark, page_id from page p'
 pageIDs = pd.read_sql(sql_command, conn)
 pageIDs = pageIDs.sort_values('page_ark',ascending = True).reset_index()
 
-def colorDoc(document = 'd7pp4q-027', colorIdxs = [], colorBy = 'confidence', model = [], targetWord = 'wine', my_dpi = 220.53):
+def colorDoc(document = 'd7pp4q-027', colorIdxs = [], colorBy = 'confidence', model = [], targetWord = '', my_dpi = 220.53):
     df, docIdx, documentName = getDoc(document)
     # Format dataframe from sql output
     df['text'] = df['text'].str.lower()
@@ -80,8 +80,9 @@ def colorDoc(document = 'd7pp4q-027', colorIdxs = [], colorBy = 'confidence', mo
                     fontsize=height/4, ha='left', va='bottom')
         ax.set_xlim((0,im_width))
         ax.set_ylim((0,im_height))
-    plt.title(str(docIdx) + ' : ' + documentName,fontdict = {'fontsize':22})
-    plt.savefig(str(docIdx) + ' : ' + documentName + colorBy + '.png')
+    plt.title(str(docIdx) + ' : ' + documentName + '\n' + colorBy + ' ' + targetWord , \
+        fontdict = {'fontsize':22})
+    plt.savefig(str(docIdx) + ' : ' + documentName + colorBy + ' ' + targetWord + '.png')
     plt.show()
     return
 

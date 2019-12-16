@@ -22,7 +22,7 @@ sql_command ='select p.page_ark, page_id from page p'
 pageIDs = pd.read_sql(sql_command, conn)
 pageIDs = pageIDs.sort_values('page_ark',ascending = True).reset_index()
 
-def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy = 'confidence'):
+def colorDoc(document = 'd7pp4q-027', colorIdxs = [], colorBy = 'confidence', model = [], targetWord = 'wine', my_dpi = 220.53):
     df, docIdx, documentName = getDoc(document)
     # Format dataframe from sql output
     df['text'] = df['text'].str.lower()
@@ -34,37 +34,44 @@ def colorDoc(document = 'd7pp4q-027', colorLabels = [], my_dpi = 220.53, colorBy
     df.bottom = im_height-df.bottom
     # Deterimine coloring scheme
     # If appropriate sized color labels are supplied, then use those. Otherwise go with default (i.e. confidence).
-    if len(colorLabels) > 0:
-        if len(df) == len(colorLabels):
+    if len(colorIdxs) > 0:
+        if len(df) == len(colorIdxs):
             colorBy = 'userDefined'
         else: 
             pass
     else:
         pass
     if colorBy == 'userDefined':
-        # k = len(np.unique(np.array(colorLabels)));
+        # k = len(np.unique(np.array(colorIdxs)));
         cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, 101))
         cmap[0,:] = np.array([1,1,1,1])
-        df['colorVals'] = colorLabels
-        # colorLabels = [random.randint(0,max(topics)) for i in range(len(df))]
+        df['colorVals'] = colorIdxs
+        # colorIdxs = [random.randint(0,max(topics)) for i in range(len(df))]
     elif colorBy == 'random':
         topics = list(range(10))
         k = len(topics)
         cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, len(topics)))
-        colorLabels = [random.randint(0,max(topics)) for i in range(len(df))]
+        colorIdxs = [random.randint(0,max(topics)) for i in range(len(df))]
     elif colorBy == 'confidence':
         confidences = list(range(101))
         cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, len(confidences)))
-        colorLabels = df['confidence'].astype(int)
+        colorIdxs = df['confidence'].astype(int)
     elif colorBy == 'text_confidence':
         confidences = list(range(101))
         confidenceThresh = 80;
         df.loc[df['confidence']<80, 'confidence'] = 0
         cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, len(confidences)))
-        colorLabels = df['confidence'].astype(int)
+        colorIdxs = df['confidence'].astype(int)
+    elif colorBy == 'wordSimilarity':
+        colorIdxs = colorScoreText(documentName, targetWord, model)
+        cmap = plt.get_cmap('RdYlGn')(np.linspace(0.15, 0.85, 101))
+        cmap[0,:] = np.array([1,1,1,1])
+        df['colorVals'] = colorIdxs
+
+
     # Plot:
     fig, ax = plt.subplots(figsize=(im_width/my_dpi, im_height/my_dpi), dpi=my_dpi)
-    for idx,word,c in zip(list(range(len(df.text))),df.text,colorLabels):
+    for idx,word,c in zip(list(range(len(df.text))),df.text,colorIdxs):
         start = (df.left[idx],df.bottom[idx])
         height = df.top[idx]-df.bottom[idx]
         width = df.right[idx]-df.left[idx]
@@ -140,5 +147,28 @@ def getColorIdx(orderedScores):
 
 def getOrderedColorIdx(preprocessed_texts, scores): 
     orderedScores = orderScores(preprocessed_texts, scores)
+    colorIdxs = getColorIdx(orderedScores)
+    return colorIdxs 
+
+def scoreText(documentName, targetWord, model):
+    ''' Score document according to similarity to target word. 
+    Rescale scores on an integer scale from 0 to 100 (for coloring document).
+    '''
+    from scipy import spatial
+    preprocessed_texts = preprocessText(documentName)
+    orderedScores= []
+    for currWord in preprocessed_texts:
+        try: 
+            wordScore = spatial.distance.cosine(model.wv[currWord], model.wv[targetWord])
+            orderedScores.append(wordScore)
+        except KeyError: 
+            orderedScores.append(0)    
+    return orderedScores 
+
+def colorScoreText(documentName, targetWord, model):
+    ''' Score document according to similarity to target word. 
+    Rescale scores on an integer scale from 0 to 100 (for coloring document).
+    '''
+    orderedScores = scoreText(documentName, targetWord, model)    
     colorIdxs = getColorIdx(orderedScores)
     return colorIdxs 
